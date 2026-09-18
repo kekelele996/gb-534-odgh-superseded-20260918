@@ -19,6 +19,23 @@ func RequirePermission(permission string) gin.HandlerFunc {
 		c.Next()
 	}
 }
+func RequireAnyPermission(permissions ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		actor, ok := ActorFromContext(c)
+		if !ok {
+			util.Fail(c, util.NewError(http.StatusUnauthorized, util.CodeUnauthorized, "authentication context is missing"))
+			return
+		}
+		role := constants.Role(actor.Role)
+		for _, permission := range permissions {
+			if constants.HasPermission(role, permission) {
+				c.Next()
+				return
+			}
+		}
+		util.Fail(c, util.NewError(http.StatusForbidden, util.CodeForbidden, "role does not have permission for this action"))
+	}
+}
 func RequireRoles(roles ...constants.Role) gin.HandlerFunc {
 	allowed := make(map[constants.Role]struct{}, len(roles))
 	for _, role := range roles {

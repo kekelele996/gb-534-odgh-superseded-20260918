@@ -15,6 +15,7 @@ type DeviationAnalysisRepository interface {
 	FindByIdempotencyKey(context.Context, string) (model.DeviationAnalysis, error)
 	FindByInput(context.Context, string, string) (model.DeviationAnalysis, error)
 	Transition(context.Context, uint, string, string, map[string]any) (bool, error)
+	WorkflowTransition(context.Context, uint, string, string, map[string]any, model.AuditLog) (bool, error)
 	Complete(context.Context, uint, map[string]any) (bool, error)
 	SetReplayVerified(context.Context, uint, bool) error
 }
@@ -98,6 +99,42 @@ func (r *deviationAnalysisRepository) Transition(
 	}
 	return result.RowsAffected == 1, nil
 }
+
+// WorkflowTransition performs the conditional state update and the audit insert in
+// a single transaction so that confirmation can never be half-written. When no row
+// matches the expected prior state (duplicate or concurrent request), changed is
+// false and the transaction is rolled back without touching anything.
+func (r *deviationAnalysisRepository) WorkflowTransition(
+	ctx context.Context, id uint, from, to string, updates map[string]any, audit model.AuditLog,
+) (bool, error) {
+	if updates == nil {
+		updates = map[string]any{}
+	}
+	updates["analysis_state"] = to
+	updates["updated_at"] = time.Now().UTC()
+	changed := false
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&model.DeviationAnalysis{}).
+			Where("id = ? AND analysis_state = ?", id, from).Updates(updates)
+		if result.Error != nil {
+			return fmt.Errorf("transition deviation analysis %d: %w", id, result.Error)
+		}
+		if result.RowsAffected != 1 {
+			changed = false
+			return nil
+		}
+		if err := tx.Create(&audit).Error; err != nil {
+			return fmt.Errorf("record deviation analysis audit: %w", err)
+		}
+		changed = true
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return changed, nil
+}
+
 func (r *deviationAnalysisRepository) Complete(ctx context.Context, id uint, updates map[string]any) (bool, error) {
 	updates["analysis_state"] = "completed"
 	updates["updated_at"] = time.Now().UTC()

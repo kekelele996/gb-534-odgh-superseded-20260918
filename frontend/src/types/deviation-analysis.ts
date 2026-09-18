@@ -38,6 +38,11 @@ export interface DeviationAnalysis {
   initiated_by_name: string
   reviewed_by?: number
   reviewed_by_name?: string
+  reviewed_at?: string
+  return_reason?: string
+  confirmed_by?: number
+  confirmed_by_name?: string
+  confirmed_at?: string
   duration_milliseconds: number
   failure_reason?: string
   review_comment?: string

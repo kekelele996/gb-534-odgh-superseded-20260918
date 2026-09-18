@@ -34,9 +34,11 @@ var rolePermissions = map[Role]map[string]struct{}{
 		PermissionRead: {}, PermissionSeriesImport: {}, PermissionSeriesProcess: {},
 		PermissionAnalysisRun: {},
 	},
+	// The independent reviewer is the third, distinct person in the workflow and
+	// only confirms results already reviewed by someone else; the review action
+	// belongs to the process scientist so the three roles stay separated.
 	RoleReviewer: {
-		PermissionRead: {}, PermissionAnalysisReview: {}, PermissionAnalysisConfirm: {},
-		PermissionAuditRead: {},
+		PermissionRead: {}, PermissionAnalysisConfirm: {}, PermissionAuditRead: {},
 	},
 	RoleAuditor: {PermissionRead: {}, PermissionAuditRead: {}},
 }

@@ -12,6 +12,10 @@ func RegisterDeviationAnalysisRoutes(
 	group.GET("", middleware.RequirePermission(constants.PermissionRead), h.List)
 	group.GET("/:id", middleware.RequirePermission(constants.PermissionRead), h.Get)
 	group.POST("", middleware.RequirePermission(constants.PermissionAnalysisRun), runLimiter.Middleware("analysis-run"), h.Run)
-	group.POST("/:id/transition", middleware.RequirePermission(constants.PermissionAnalysisReview), h.Transition)
+	// Review-class transitions (review/return/void) need review permission while
+	// confirmation needs confirm permission; the handler enforces the exact action.
+	group.POST("/:id/transition",
+		middleware.RequireAnyPermission(constants.PermissionAnalysisReview, constants.PermissionAnalysisConfirm),
+		h.Transition)
 	group.POST("/:id/replay", middleware.RequirePermission(constants.PermissionAnalysisRun), runLimiter.Middleware("analysis-replay"), h.Replay)
 }

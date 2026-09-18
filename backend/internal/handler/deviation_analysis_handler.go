@@ -61,10 +61,19 @@ func (h *DeviationAnalysisHandler) Transition(c *gin.Context) {
 		return
 	}
 	actor := mustActor(c)
-	if request.ToState == string(constants.AnalysisConfirmed) &&
-		!constants.HasPermission(constants.Role(actor.Role), constants.PermissionAnalysisConfirm) {
-		util.Fail(c, util.NewError(http.StatusForbidden, util.CodeForbidden, "role cannot confirm analysis results"))
-		return
+	role := constants.Role(actor.Role)
+	switch request.ToState {
+	case string(constants.AnalysisConfirmed):
+		if !constants.HasPermission(role, constants.PermissionAnalysisConfirm) {
+			util.Fail(c, util.NewError(http.StatusForbidden, util.CodeForbidden, "role cannot confirm analysis results"))
+			return
+		}
+	default:
+		// reviewed / investigating / voided are review-class workflow actions.
+		if !constants.HasPermission(role, constants.PermissionAnalysisReview) {
+			util.Fail(c, util.NewError(http.StatusForbidden, util.CodeForbidden, "role cannot perform this review action"))
+			return
+		}
 	}
 	result, serviceErr := h.service.Transition(c.Request.Context(), id, request, actor)
 	respond(c, http.StatusOK, result, serviceErr)

@@ -20,6 +20,11 @@ type DeviationAnalysis struct {
 	InitiatedByName      string       `gorm:"size:80;not null" json:"initiated_by_name"`
 	ReviewedBy           *uint        `gorm:"index" json:"reviewed_by,omitempty"`
 	ReviewedByName       string       `gorm:"size:80" json:"reviewed_by_name,omitempty"`
+	ReviewedAt           *time.Time   `json:"reviewed_at,omitempty"`
+	ReturnReason         string       `gorm:"type:text" json:"return_reason,omitempty"`
+	ConfirmedBy          *uint        `gorm:"index" json:"confirmed_by,omitempty"`
+	ConfirmedByName      string       `gorm:"size:80" json:"confirmed_by_name,omitempty"`
+	ConfirmedAt          *time.Time   `json:"confirmed_at,omitempty"`
 	IdempotencyKey       string       `gorm:"size:128;not null;uniqueIndex" json:"idempotency_key"`
 	DurationMilliseconds int64        `gorm:"not null" json:"duration_milliseconds"`
 	FailureReason        string       `gorm:"type:text" json:"failure_reason,omitempty"`
@@ -28,8 +33,19 @@ type DeviationAnalysis struct {
 	CreatedAt            time.Time    `gorm:"not null" json:"created_at"`
 	UpdatedAt            time.Time    `gorm:"not null" json:"updated_at"`
 }
-func (DeviationAnalysis) TableName() string                    { return "deviation_analyses" }
-func (a DeviationAnalysis) ReviewerSeparated(userID uint) bool { return a.InitiatedBy != userID }
+func (DeviationAnalysis) TableName() string { return "deviation_analyses" }
+
+// InitiatorReviewerSeparated reports whether the reviewer is a different person
+// than the analysis initiator (required for the first two roles to be separated).
+func (a DeviationAnalysis) InitiatorReviewerSeparated(userID uint) bool {
+	return a.InitiatedBy != userID
+}
+
+// ConfirmerEligible reports whether userID may confirm the current record:
+// the confirmer must be neither the initiator nor the reviewer who marked it reviewed.
+func (a DeviationAnalysis) ConfirmerEligible(userID uint) bool {
+	return a.InitiatedBy != userID && (a.ReviewedBy == nil || *a.ReviewedBy != userID)
+}
 type User struct {
 	ID           uint      `gorm:"primaryKey" json:"id"`
 	Username     string    `gorm:"size:80;not null;uniqueIndex" json:"username"`

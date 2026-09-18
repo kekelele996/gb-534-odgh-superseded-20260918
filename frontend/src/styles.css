@@ -217,6 +217,34 @@ code { font-family: "SFMono-Regular", Consolas, monospace; }
   margin-top: 18px; padding-top: 14px; border-top: 2px solid var(--ink);
 }
 .review-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 7px; }
+.review-band .muted { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: .66rem; }
+
+.duty-band {
+  display: grid; gap: 11px; margin: 14px 0; padding: 13px 14px;
+  background: #f6f8f7; border: 1px solid var(--line); border-left: 4px solid #7f9c89; border-radius: 5px;
+}
+.duty-title { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.duty-title strong { font-size: .74rem; }
+.duty-title small { color: var(--muted); font-size: .62rem; }
+.duty-roles {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+}
+.duty-roles li {
+  min-width: 0; display: grid; gap: 3px; padding: 10px 12px;
+  background: var(--paper); border: 1px dashed var(--line-strong); border-radius: 5px;
+}
+.duty-roles li.done { border-style: solid; border-color: #91b9a1; background: #edf4ef; }
+.duty-roles li.returned { border-color: #d8b26a; background: #fbf4e6; }
+.duty-roles li.self { outline: 2px solid var(--leaf, #6d8f7c); outline-offset: 1px; }
+.duty-roles .duty-step {
+  color: var(--muted); font-size: .58rem; font-weight: 750;
+  text-transform: uppercase; letter-spacing: .06em;
+}
+.duty-roles strong { font-size: .72rem; line-height: 1.4; overflow-wrap: anywhere; }
+.duty-roles small { color: var(--muted); font-size: .6rem; }
+.duty-roles li.self .duty-step::after { content: " · 我"; color: #3f6b51; }
+@media (max-width: 720px) { .duty-roles { grid-template-columns: 1fr; } }
 
 .drawer-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 2px solid var(--ink); }
 .drawer-heading > div { display: flex; align-items: center; gap: 9px; }

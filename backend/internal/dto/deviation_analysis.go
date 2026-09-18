@@ -34,6 +34,11 @@ type DeviationAnalysisResponse struct {
 	InitiatedByName      string                `json:"initiated_by_name"`
 	ReviewedBy           *uint                 `json:"reviewed_by,omitempty"`
 	ReviewedByName       string                `json:"reviewed_by_name,omitempty"`
+	ReviewedAt           *time.Time            `json:"reviewed_at,omitempty"`
+	ReturnReason         string                `json:"return_reason,omitempty"`
+	ConfirmedBy          *uint                 `json:"confirmed_by,omitempty"`
+	ConfirmedByName      string                `json:"confirmed_by_name,omitempty"`
+	ConfirmedAt          *time.Time            `json:"confirmed_at,omitempty"`
 	DurationMilliseconds int64                 `json:"duration_milliseconds"`
 	FailureReason        string                `json:"failure_reason,omitempty"`
 	ReviewComment        string                `json:"review_comment,omitempty"`
@@ -58,6 +63,9 @@ func NewDeviationAnalysisResponse(analysis model.DeviationAnalysis) DeviationAna
 		Explanation: analysis.Explanation, AnalyzedAt: analysis.AnalyzedAt,
 		InitiatedBy: analysis.InitiatedBy, InitiatedByName: analysis.InitiatedByName,
 		ReviewedBy: analysis.ReviewedBy, ReviewedByName: analysis.ReviewedByName,
+		ReviewedAt: analysis.ReviewedAt, ReturnReason: analysis.ReturnReason,
+		ConfirmedBy: analysis.ConfirmedBy, ConfirmedByName: analysis.ConfirmedByName,
+		ConfirmedAt: analysis.ConfirmedAt,
 		DurationMilliseconds: analysis.DurationMilliseconds, FailureReason: analysis.FailureReason,
 		ReviewComment: analysis.ReviewComment, ReplayVerified: analysis.ReplayVerified,
 		CreatedAt: analysis.CreatedAt, UpdatedAt: analysis.UpdatedAt,

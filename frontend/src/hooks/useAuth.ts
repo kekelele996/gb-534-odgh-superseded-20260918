@@ -8,7 +8,9 @@ export function useAuth() {
   const canImportSeries = computed(() => auth.hasRole('admin', 'data_analyst'))
   const canProcessSeries = computed(() => auth.hasRole('admin', 'process_scientist', 'data_analyst'))
   const canRunAnalysis = computed(() => auth.hasRole('admin', 'data_analyst'))
-  const canReview = computed(() => auth.hasRole('admin', 'process_scientist', 'reviewer'))
+  // Review and confirm are deliberately split across two roles so initiator,
+  // reviewer and confirmer can be three different people.
+  const canReview = computed(() => auth.hasRole('admin', 'process_scientist'))
   const canConfirm = computed(() => auth.hasRole('admin', 'reviewer'))
   const canAudit = computed(() => auth.hasRole('admin', 'reviewer', 'auditor'))
   return { auth, canWriteVessels, canWriteRecipes, canImportSeries, canProcessSeries, canRunAnalysis, canReview, canConfirm, canAudit }
