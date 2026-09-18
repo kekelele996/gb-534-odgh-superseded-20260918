@@ -30,6 +30,11 @@ function explainSelected() {
   evidenceDrawer.value = false
   explanationDrawer.value = true
 }
+const actionLabels: Record<string, string> = {
+  run: '运行分析', review: '复核', confirm: '确认',
+  return_investigation: '退回调查', void: '作废', transition: '状态迁移',
+}
+function actionLabel(action: string) { return actionLabels[action] ?? action }
 onMounted(() => Promise.all([audit.load(), analyses.load()]))
 </script>
 
@@ -58,7 +63,7 @@ onMounted(() => Promise.all([audit.load(), analyses.load()]))
       <div v-else-if="!audit.items.length" class="empty-state"><h2>暂无审计事件</h2><p>写操作发生后会记录请求与快照。</p></div>
       <el-table v-else :data="audit.items" row-key="id">
         <el-table-column label="时间" width="175"><template #default="{ row }">{{ new Date(row.created_at).toLocaleString() }}</template></el-table-column>
-        <el-table-column label="实体" min-width="170"><template #default="{ row }"><div class="primary-cell"><strong>{{ row.entity_type }} #{{ row.entity_id }}</strong><span>{{ row.action }}</span></div></template></el-table-column>
+        <el-table-column label="实体" min-width="170"><template #default="{ row }"><div class="primary-cell"><strong>{{ row.entity_type }} #{{ row.entity_id }}</strong><span>{{ actionLabel(row.action) }}</span></div></template></el-table-column>
         <el-table-column label="操作者" width="150"><template #default="{ row }"><div class="primary-cell"><strong>{{ row.actor_name }}</strong><span>{{ row.actor_role }}</span></div></template></el-table-column>
         <el-table-column label="Request ID" min-width="240"><template #default="{ row }"><code class="request-code">{{ row.request_id }}</code></template></el-table-column>
         <el-table-column label="算法" width="160"><template #default="{ row }"><span>{{ row.algorithm_version || '—' }}</span><small v-if="row.duration_ms" class="cell-note">{{ row.duration_ms }} ms</small></template></el-table-column>

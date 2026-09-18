@@ -218,6 +218,19 @@ code { font-family: "SFMono-Regular", Consolas, monospace; }
 }
 .review-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 7px; }
 
+.role-trail { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 14px 0 4px; background: var(--line); border: 1px solid var(--line); }
+.role-trail article { min-width: 0; display: grid; gap: 4px; padding: 10px 12px; background: var(--paper); }
+.role-trail article.active { background: #eef5f0; }
+.role-trail article.pending { background: #f7f7f5; }
+.role-trail .eyebrow { margin: 0; }
+.role-trail strong { font-size: .74rem; }
+.role-trail small { color: var(--muted); font-size: .61rem; overflow-wrap: anywhere; }
+.return-alert { margin: 12px 0; }
+.workflow-field { display: grid; gap: 7px; align-content: start; }
+.workflow-field label { color: var(--muted); font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.workflow-field .el-button { justify-self: start; }
+.workflow-note { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: .66rem; }
+
 .drawer-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 2px solid var(--ink); }
 .drawer-heading > div { display: flex; align-items: center; gap: 9px; }
 .drawer-heading span { display: grid; }
@@ -318,6 +331,7 @@ code { font-family: "SFMono-Regular", Consolas, monospace; }
   .phase-score-grid { grid-template-columns: 1fr; }
   .review-band, .run-band { grid-template-columns: 1fr; }
   .review-actions, .run-band > div:first-child { grid-column: auto; }
+  .role-trail { grid-template-columns: 1fr; }
   .evidence-grid { grid-template-columns: 1fr; }
   .phase-evidence { grid-template-columns: 1fr auto; }
   .phase-evidence > span:not(.phase-badge) { grid-column: 1 / -1; }

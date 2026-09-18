@@ -1,13 +1,20 @@
 package repository
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 	"fermentation-kinetics-deviation-analysis/backend/internal/dto"
 	"fermentation-kinetics-deviation-analysis/backend/internal/model"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
+
+// ErrAnalysisStateChanged means the conditional state update matched no row
+// because the analysis left its expected state (a duplicate or concurrent update).
+var ErrAnalysisStateChanged = errors.New("analysis state changed concurrently")
+
 type DeviationAnalysisRepository interface {
 	Create(context.Context, *model.DeviationAnalysis) error
 	GetByID(context.Context, uint, bool) (model.DeviationAnalysis, error)
@@ -15,6 +22,7 @@ type DeviationAnalysisRepository interface {
 	FindByIdempotencyKey(context.Context, string) (model.DeviationAnalysis, error)
 	FindByInput(context.Context, string, string) (model.DeviationAnalysis, error)
 	Transition(context.Context, uint, string, string, map[string]any) (bool, error)
+	TransitionWithAudit(context.Context, uint, string, string, map[string]any, model.AuditLog) error
 	Complete(context.Context, uint, map[string]any) (bool, error)
 	SetReplayVerified(context.Context, uint, bool) error
 }
@@ -97,6 +105,38 @@ func (r *deviationAnalysisRepository) Transition(
 		return false, fmt.Errorf("transition deviation analysis %d: %w", id, result.Error)
 	}
 	return result.RowsAffected == 1, nil
+}
+
+// TransitionWithAudit performs the conditional state update and the audit insert
+// inside a single transaction. A zero-row update (duplicate or concurrent change)
+// rolls the audit insert back and returns ErrAnalysisStateChanged, so a failed
+// step never leaves a partial state or an orphaned audit record.
+func (r *deviationAnalysisRepository) TransitionWithAudit(
+	ctx context.Context, id uint, from, to string, updates map[string]any, audit model.AuditLog,
+) error {
+	if updates == nil {
+		updates = map[string]any{}
+	}
+	updates["analysis_state"] = to
+	updates["updated_at"] = time.Now().UTC()
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		query := tx.Model(&model.DeviationAnalysis{}).
+			Where("id = ? AND analysis_state = ?", id, from)
+		if tx.Dialector.Name() == "postgres" {
+			query = query.Clauses(clause.Locking{Strength: "UPDATE"})
+		}
+		result := query.Updates(updates)
+		if result.Error != nil {
+			return fmt.Errorf("transition deviation analysis %d: %w", id, result.Error)
+		}
+		if result.RowsAffected != 1 {
+			return ErrAnalysisStateChanged
+		}
+		if err := tx.Create(&audit).Error; err != nil {
+			return fmt.Errorf("record transition audit for analysis %d: %w", id, err)
+		}
+		return nil
+	})
 }
 func (r *deviationAnalysisRepository) Complete(ctx context.Context, id uint, updates map[string]any) (bool, error) {
 	updates["analysis_state"] = "completed"

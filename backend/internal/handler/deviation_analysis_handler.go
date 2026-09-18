@@ -26,7 +26,7 @@ func (h *DeviationAnalysisHandler) List(c *gin.Context) {
 	result, err := h.service.List(c.Request.Context(), dto.DeviationAnalysisQuery{
 		SensorSeriesID: seriesID, RecipeID: recipeID, State: c.Query("state"),
 		Level: c.Query("deviation_level"), Initiator: c.Query("initiator"), Page: page, PageSize: size,
-	})
+	}, mustActor(c))
 	respond(c, http.StatusOK, result, err)
 }
 func (h *DeviationAnalysisHandler) Get(c *gin.Context) {
@@ -35,7 +35,7 @@ func (h *DeviationAnalysisHandler) Get(c *gin.Context) {
 		util.Fail(c, err)
 		return
 	}
-	result, serviceErr := h.service.Get(c.Request.Context(), id)
+	result, serviceErr := h.service.Get(c.Request.Context(), id, mustActor(c))
 	respond(c, http.StatusOK, result, serviceErr)
 }
 func (h *DeviationAnalysisHandler) Run(c *gin.Context) {

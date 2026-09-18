@@ -20,6 +20,11 @@ type DeviationAnalysis struct {
 	InitiatedByName      string       `gorm:"size:80;not null" json:"initiated_by_name"`
 	ReviewedBy           *uint        `gorm:"index" json:"reviewed_by,omitempty"`
 	ReviewedByName       string       `gorm:"size:80" json:"reviewed_by_name,omitempty"`
+	ReviewedAt           *time.Time   `json:"reviewed_at,omitempty"`
+	ConfirmedBy          *uint        `gorm:"index" json:"confirmed_by,omitempty"`
+	ConfirmedByName      string       `gorm:"size:80" json:"confirmed_by_name,omitempty"`
+	ConfirmedAt          *time.Time   `json:"confirmed_at,omitempty"`
+	ReturnReason         string       `gorm:"type:text" json:"return_reason,omitempty"`
 	IdempotencyKey       string       `gorm:"size:128;not null;uniqueIndex" json:"idempotency_key"`
 	DurationMilliseconds int64        `gorm:"not null" json:"duration_milliseconds"`
 	FailureReason        string       `gorm:"type:text" json:"failure_reason,omitempty"`
@@ -28,8 +33,23 @@ type DeviationAnalysis struct {
 	CreatedAt            time.Time    `gorm:"not null" json:"created_at"`
 	UpdatedAt            time.Time    `gorm:"not null" json:"updated_at"`
 }
-func (DeviationAnalysis) TableName() string                    { return "deviation_analyses" }
-func (a DeviationAnalysis) ReviewerSeparated(userID uint) bool { return a.InitiatedBy != userID }
+func (DeviationAnalysis) TableName() string { return "deviation_analyses" }
+
+// InitiatorSeparated reports whether the user differs from the analysis initiator.
+func (a DeviationAnalysis) InitiatorSeparated(userID uint) bool { return a.InitiatedBy != userID }
+
+// ReviewerSeparated reports whether the user differs from the person who recorded
+// the current review conclusion. A cleared review (after a return to investigation)
+// imposes no restriction.
+func (a DeviationAnalysis) ReviewerSeparated(userID uint) bool {
+	return a.ReviewedBy == nil || *a.ReviewedBy != userID
+}
+
+// ConfirmationEligible reports whether the user is neither the initiator nor the
+// current reviewer, which is the three-role separation rule for confirmation.
+func (a DeviationAnalysis) ConfirmationEligible(userID uint) bool {
+	return a.InitiatorSeparated(userID) && a.ReviewerSeparated(userID)
+}
 type User struct {
 	ID           uint      `gorm:"primaryKey" json:"id"`
 	Username     string    `gorm:"size:80;not null;uniqueIndex" json:"username"`

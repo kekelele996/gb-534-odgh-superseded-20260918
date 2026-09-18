@@ -128,9 +128,9 @@ func (s *DeviationAnalysisService) Run(
 		inputHash, algorithm.Version, duration); err != nil {
 		return dto.DeviationAnalysisResponse{}, false, err
 	}
-	return dto.NewDeviationAnalysisResponse(analysis), false, nil
+	return dto.NewDeviationAnalysisResponseFor(analysis, actor), false, nil
 }
-func (s *DeviationAnalysisService) Get(ctx context.Context, id uint) (dto.DeviationAnalysisResponse, error) {
+func (s *DeviationAnalysisService) Get(ctx context.Context, id uint, actor util.Actor) (dto.DeviationAnalysisResponse, error) {
 	analysis, err := s.analyses.GetByID(ctx, id, true)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -138,10 +138,10 @@ func (s *DeviationAnalysisService) Get(ctx context.Context, id uint) (dto.Deviat
 		}
 		return dto.DeviationAnalysisResponse{}, util.WrapError(http.StatusInternalServerError, util.CodeInternal, "unable to load deviation analysis", err)
 	}
-	return dto.NewDeviationAnalysisResponse(analysis), nil
+	return dto.NewDeviationAnalysisResponseFor(analysis, actor), nil
 }
 func (s *DeviationAnalysisService) List(
-	ctx context.Context, query dto.DeviationAnalysisQuery,
+	ctx context.Context, query dto.DeviationAnalysisQuery, actor util.Actor,
 ) (dto.DeviationAnalysisListResponse, error) {
 	analyses, total, err := s.analyses.List(ctx, query)
 	if err != nil {
@@ -151,7 +151,7 @@ func (s *DeviationAnalysisService) List(
 		Items: make([]dto.DeviationAnalysisResponse, 0, len(analyses)), Total: total, Page: query.Page, Size: query.PageSize,
 	}
 	for _, analysis := range analyses {
-		response.Items = append(response.Items, dto.NewDeviationAnalysisResponse(analysis))
+		response.Items = append(response.Items, dto.NewDeviationAnalysisResponseFor(analysis, actor))
 	}
 	return response, nil
 }
@@ -170,34 +170,118 @@ func (s *DeviationAnalysisService) Transition(
 		return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusConflict, util.CodeStateTransition,
 			"illegal analysis transition from "+analysis.AnalysisState+" to "+request.ToState)
 	}
-	if to == constants.AnalysisConfirmed && !analysis.ReviewerSeparated(actor.UserID) {
-		return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusConflict, util.CodeReviewerConflict,
-			"analysis initiator cannot confirm their own result")
+	comment := strings.TrimSpace(request.Comment)
+	// Three-role separation and per-action comment rules. The RBAC layer has
+	// already verified role permissions; here we verify identity separation.
+	switch to {
+	case constants.AnalysisReviewed:
+		if !analysis.InitiatorSeparated(actor.UserID) {
+			return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusConflict, util.CodeReviewerConflict,
+				"analysis initiator cannot review their own result")
+		}
+		if comment == "" {
+			return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusBadRequest, util.CodeValidation,
+				"review conclusion comment is required")
+		}
+	case constants.AnalysisConfirmed:
+		if !analysis.InitiatorSeparated(actor.UserID) {
+			return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusConflict, util.CodeReviewerConflict,
+				"analysis initiator cannot confirm their own result")
+		}
+		if !analysis.ReviewerSeparated(actor.UserID) {
+			return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusConflict, util.CodeReviewerConflict,
+				"the reviewer who marked this result reviewed cannot also confirm it")
+		}
+	case constants.AnalysisInvestigating:
+		if comment == "" {
+			return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusBadRequest, util.CodeValidation,
+				"return-to-investigation reason is required")
+		}
 	}
 	before := analysis
-	updates := map[string]any{"review_comment": strings.TrimSpace(request.Comment)}
-	if to == constants.AnalysisReviewed {
+	now := s.now()
+	updates := map[string]any{"updated_at": now}
+	after := analysis
+	switch to {
+	case constants.AnalysisReviewed:
+		// Re-review after an investigation replaces the previous conclusion and
+		// restores confirmation eligibility for a third person.
 		updates["reviewed_by"] = actor.UserID
 		updates["reviewed_by_name"] = actor.Username
+		updates["reviewed_at"] = now
+		updates["review_comment"] = comment
+		updates["return_reason"] = ""
+		after.ReviewedBy, after.ReviewedByName, after.ReviewedAt = &actor.UserID, actor.Username, &now
+		after.ReviewComment, after.ReturnReason = comment, ""
+	case constants.AnalysisConfirmed:
+		// Confirmer, confirmation time and audit row are written once, atomically.
+		updates["confirmed_by"] = actor.UserID
+		updates["confirmed_by_name"] = actor.Username
+		updates["confirmed_at"] = now
+		after.ConfirmedBy, after.ConfirmedByName, after.ConfirmedAt = &actor.UserID, actor.Username, &now
+	case constants.AnalysisInvestigating:
+		// A return clears the original review conclusion; confirmation is blocked
+		// until a fresh review is recorded. The reason stays visible meanwhile.
+		updates["reviewed_by"] = nil
+		updates["reviewed_by_name"] = ""
+		updates["reviewed_at"] = nil
+		updates["review_comment"] = ""
+		updates["return_reason"] = comment
+		after.ReviewedBy, after.ReviewedByName, after.ReviewedAt = nil, "", nil
+		after.ReviewComment, after.ReturnReason = "", comment
 	}
-	changed, err := s.analyses.Transition(ctx, id, analysis.AnalysisState, request.ToState, updates)
+	after.AnalysisState = request.ToState
+	after.UpdatedAt = now
+	audit, err := newTransitionAudit(actor, id, transitionAuditAction(to), before, after)
 	if err != nil {
-		return dto.DeviationAnalysisResponse{}, util.WrapError(http.StatusInternalServerError, util.CodeInternal, "unable to transition deviation analysis", err)
-	}
-	if !changed {
-		return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusConflict, util.CodeConflict, "analysis state changed concurrently")
-	}
-	analysis.AnalysisState = request.ToState
-	analysis.ReviewComment = strings.TrimSpace(request.Comment)
-	if to == constants.AnalysisReviewed {
-		analysis.ReviewedBy = &actor.UserID
-		analysis.ReviewedByName = actor.Username
-	}
-	if err := recordAudit(ctx, s.audits, actor, "deviation_analysis", id, "transition", before, analysis,
-		analysis.InputHash, analysis.AlgorithmVersion, 0); err != nil {
 		return dto.DeviationAnalysisResponse{}, err
 	}
-	return s.Get(ctx, id)
+	// The conditional update and the audit insert share one transaction: any
+	// failure rolls the state, review conclusion and confirmation info back.
+	if err := s.analyses.TransitionWithAudit(ctx, id, analysis.AnalysisState, request.ToState, updates, audit); err != nil {
+		if errors.Is(err, repository.ErrAnalysisStateChanged) {
+			return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusConflict, util.CodeConflict,
+				"analysis state changed concurrently; reload and retry")
+		}
+		return dto.DeviationAnalysisResponse{}, util.WrapError(http.StatusInternalServerError, util.CodeInternal, "unable to transition deviation analysis", err)
+	}
+	return s.Get(ctx, id, actor)
+}
+
+// transitionAuditAction maps a target state to the audit action recorded for it.
+func transitionAuditAction(to constants.AnalysisState) string {
+	switch to {
+	case constants.AnalysisReviewed:
+		return "review"
+	case constants.AnalysisConfirmed:
+		return "confirm"
+	case constants.AnalysisInvestigating:
+		return "return_investigation"
+	case constants.AnalysisVoided:
+		return "void"
+	default:
+		return "transition"
+	}
+}
+
+// newTransitionAudit serializes before/after snapshots for a state transition.
+func newTransitionAudit(
+	actor util.Actor, id uint, action string, before, after model.DeviationAnalysis,
+) (model.AuditLog, error) {
+	beforeJSON, err := util.CanonicalJSON(before)
+	if err != nil {
+		return model.AuditLog{}, util.WrapError(http.StatusInternalServerError, util.CodeInternal, "unable to serialize audit before snapshot", err)
+	}
+	afterJSON, err := util.CanonicalJSON(after)
+	if err != nil {
+		return model.AuditLog{}, util.WrapError(http.StatusInternalServerError, util.CodeInternal, "unable to serialize audit after snapshot", err)
+	}
+	return model.AuditLog{
+		RequestID: actor.RequestID, ActorID: actor.UserID, ActorName: actor.Username, ActorRole: actor.Role,
+		EntityType: "deviation_analysis", EntityID: id, Action: action,
+		BeforeSnapshot: beforeJSON, AfterSnapshot: afterJSON,
+		InputHash: after.InputHash, Algorithm: after.AlgorithmVersion, CreatedAt: time.Now().UTC(),
+	}, nil
 }
 func (s *DeviationAnalysisService) Replay(
 	ctx context.Context, id uint, actor util.Actor,
@@ -236,5 +320,5 @@ func (s *DeviationAnalysisService) Replay(
 	if !passed {
 		return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusConflict, util.CodeConflict, "replay result differs from the frozen historical result")
 	}
-	return s.Get(ctx, id)
+	return s.Get(ctx, id, actor)
 }
